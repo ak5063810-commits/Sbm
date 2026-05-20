@@ -93,7 +93,7 @@
             <h3>Configuration</h3>
             
             <div class="form-group">
-                <label>1. Upload Template (JPG/PNG ONLY)</label>
+                <label>1. Override Template (JPG/PNG ONLY)</label>
                 <input type="file" id="templateUpload" accept="image/jpeg, image/png">
             </div>
 
@@ -155,8 +155,328 @@
         let studentImg = null;
         let qrImg = null;
 
-        // REMOVED GRADE ELEMENT
         let elements = {
             name:   { text: '', pctX: 0.270, pctY: 0.565, size: 90, font: '"Cascadia Code", monospace', color: '#FF0000', bold: true, align: 'left', type: 'text' },
             father: { text: '', pctX: 0.635, pctY: 0.565, size: 90, font: '"Cascadia Code", monospace', color: '#FF0000', bold: true, align: 'left', type: 'text' },
-            batch:  { text: '', pctX: 0.255, pctY: 0.61
+            batch:  { text: '', pctX: 0.255, pctY: 0.615, size: 90, font: '"Cascadia Code", monospace', color: '#FF0000', bold: true, align: 'left', type: 'text' },
+            year:   { text: '', pctX: 0.505, pctY: 0.625, size: 90, font: 'Arial, sans-serif', color: '#FF0000', bold: true, align: 'left', type: 'text' }, 
+            date:   { text: '', pctX: 0.270, pctY: 0.765, size: 90, font: 'Arial, sans-serif', color: '#FF0000', bold: true, align: 'center', type: 'text' }, 
+            serial: { text: '', pctX: 0.900, pctY: 0.920, size: 16, font: '"Cascadia Code", monospace', color: '#FF0000', bold: true, align: 'right', type: 'text' },
+            photo:  { pctX: 0.760, pctY: 0.405, pctW: 0.070, type: 'image', active: false },
+            qr:     { pctX: 0.090, pctY: 0.785, pctW: 0.056, type: 'image', active: false }
+        };
+
+        function recalculatePositions() {
+            for(let key in elements) {
+                let el = elements[key];
+                el.x = canvas.width * el.pctX;
+                el.y = canvas.height * el.pctY;
+                if(el.type === 'image') {
+                    el.w = canvas.width * el.pctW;
+                    if(key === 'photo') {
+                        el.aspectRatio = el.aspectRatio || (110/140);
+                        el.h = el.w / el.aspectRatio;
+                    } else if (key === 'qr') {
+                        el.h = el.w;
+                    }
+                }
+            }
+        }
+
+        // --- NEW: AUTO-LOAD TEMPLATE FROM THE SAME FOLDER ON GITHUB ---
+        function loadDefaultTemplate() {
+            const img = new Image();
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                templateImg = img;
+                recalculatePositions();
+                updateCanvas();
+            };
+            img.onerror = function() {
+                console.log("No template.jpg found in the repository yet.");
+                recalculatePositions();
+                updateCanvas();
+            };
+            // Simply looks for 'template.jpg' in the same GitHub folder
+            img.src = 'template.jpg'; 
+        }
+
+        let selectedElement = elements.name; 
+        
+        // Boot up Sequence
+        loadDefaultTemplate();
+
+        function toggleTheme() {
+            const body = document.documentElement;
+            body.setAttribute('data-theme', body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+        }
+
+        function showError(msg) {
+            errorMsg.innerText = msg;
+            setTimeout(() => errorMsg.innerText = "", 5000);
+        }
+
+        function handleImageUpload(inputElement, isTemplate) {
+            inputElement.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.type === "application/pdf") {
+                    showError("❌ Please upload a JPG or PNG image, not a PDF.");
+                    inputElement.value = "";
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onerror = () => showError("❌ Failed to read the file.");
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onerror = () => showError("❌ Invalid image file format.");
+                    img.onload = function() {
+                        if (isTemplate) {
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            templateImg = img;
+                            setTimeout(() => {
+                                recalculatePositions();
+                                updateCanvas();
+                            }, 50);
+                        } else {
+                            studentImg = img;
+                            elements.photo.active = true;
+                            elements.photo.aspectRatio = img.width / img.height;
+                            elements.photo.h = elements.photo.w / elements.photo.aspectRatio;
+                            selectedElement = elements.photo;
+                            syncControlPanel();
+                            updateCanvas();
+                        }
+                        showError("✅ Image loaded successfully!");
+                        errorMsg.style.color = "#16a34a";
+                        setTimeout(() => { errorMsg.innerText = ""; errorMsg.style.color = "#dc2626"; }, 3000);
+                    };
+                    img.src = event.target.result;
+                }
+                reader.readAsDataURL(file);
+            });
+        }
+
+        handleImageUpload(document.getElementById('templateUpload'), true);
+        handleImageUpload(document.getElementById('photoUpload'), false);
+
+        function generateQR(text) {
+            const qr = new QRious({ value: text, size: 300, level: 'H' });
+            const img = new Image();
+            img.src = qr.toDataURL();
+            return img;
+        }
+
+        function syncControlPanel() {
+            const label = document.getElementById('sizeInputLabel');
+            const controller = document.getElementById('inpSizeControl');
+            const fontGroup = document.getElementById('fontSelectGroup');
+            const fontDropdown = document.getElementById('inpFontControl');
+            
+            if (!selectedElement) return;
+
+            if (selectedElement.type === 'text') {
+                label.innerText = "Selected Text Size (px)";
+                controller.value = selectedElement.size;
+                fontGroup.style.display = "flex";
+                fontDropdown.value = selectedElement.font;
+            } else if (selectedElement.type === 'image') {
+                label.innerText = "Selected Asset Width (px)";
+                controller.value = Math.round(selectedElement.w);
+                fontGroup.style.display = "none";
+            }
+        }
+
+        function updateActiveElementSize() {
+            if (!selectedElement) return;
+            const val = parseInt(document.getElementById('inpSizeControl').value);
+            if (isNaN(val) || val <= 0) return;
+
+            if (selectedElement.type === 'text') {
+                selectedElement.size = val;
+            } else if (selectedElement.type === 'image') {
+                selectedElement.w = val;
+                selectedElement.pctW = val / canvas.width; 
+                selectedElement.h = val / selectedElement.aspectRatio;
+            }
+            drawCanvas();
+        }
+
+        function updateActiveElementFont() {
+            if (selectedElement && selectedElement.type === 'text') {
+                selectedElement.font = document.getElementById('inpFontControl').value;
+                drawCanvas();
+            }
+        }
+
+        function updateCanvas() {
+            elements.name.text = document.getElementById('inpName').value;
+            elements.father.text = document.getElementById('inpFather').value;
+            elements.batch.text = document.getElementById('inpBatch').value;
+            elements.year.text = document.getElementById('inpYear').value;
+            elements.date.text = document.getElementById('inpDate').value;
+            elements.serial.text = document.getElementById('inpSerial').value;
+
+            elements.qr.active = document.getElementById('inpQR').checked;
+            
+            let qrPayload = elements.serial.text || elements.name.text || "SBM Team Rajasthan";
+            qrImg = generateQR(qrPayload);
+            
+            drawCanvas();
+        }
+
+        function drawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (templateImg) {
+                ctx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#e2e8f0'; ctx.font = '40px Arial'; ctx.textAlign = 'center';
+                ctx.fillText("Loading template.jpg from GitHub...", canvas.width/2, canvas.height/2);
+            }
+
+            if (elements.photo.active && studentImg) {
+                ctx.drawImage(studentImg, elements.photo.x, elements.photo.y, elements.photo.w, elements.photo.h);
+                if (selectedElement === elements.photo) {
+                    ctx.strokeStyle = '#4f46e5'; ctx.lineWidth = 3; ctx.setLineDash([4, 4]);
+                    ctx.strokeRect(elements.photo.x, elements.photo.y, elements.photo.w, elements.photo.h);
+                    ctx.setLineDash([]);
+                } else {
+                    ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 3;
+                    ctx.strokeRect(elements.photo.x, elements.photo.y, elements.photo.w, elements.photo.h);
+                }
+            }
+
+            if (elements.qr.active && qrImg) {
+                ctx.drawImage(qrImg, elements.qr.x, elements.qr.y, elements.qr.w, elements.qr.h);
+                if (selectedElement === elements.qr) {
+                    ctx.strokeStyle = '#4f46e5'; ctx.lineWidth = 3; ctx.setLineDash([4, 4]);
+                    ctx.strokeRect(elements.qr.x, elements.qr.y, elements.qr.w, elements.qr.h);
+                    ctx.setLineDash([]);
+                }
+            }
+
+            for (const key in elements) {
+                const el = elements[key];
+                if (el.type === 'text' && el.text) {
+                    let fontPrefix = el.bold ? 'bold ' : '';
+                    if (el.font.includes('Great Vibes')) fontPrefix = ''; 
+                    
+                    ctx.font = `${fontPrefix}${el.size}px ${el.font}`;
+                    ctx.fillStyle = el.color; ctx.textAlign = el.align; ctx.textBaseline = 'middle';
+                    ctx.fillText(el.text, el.x, el.y);
+                    
+                    el.w = ctx.measureText(el.text).width; el.h = el.size; 
+
+                    if (selectedElement === el) {
+                        ctx.strokeStyle = 'rgba(79, 70, 229, 0.6)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+                        let left = el.x; if (el.align === 'center') left -= el.w / 2; if (el.align === 'right') left -= el.w;
+                        ctx.strokeRect(left - 5, el.y - el.h/2 - 5, el.w + 10, el.h + 10); ctx.setLineDash([]);
+                    }
+                }
+            }
+        }
+
+        let isDragging = false; let dragTarget = null; let dragOffsetX = 0; let dragOffsetY = 0;
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height;
+            let clientX = e.clientX; let clientY = e.clientY;
+            if(e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+            return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+        }
+
+        function handleStart(e) {
+            e.preventDefault(); const pos = getMousePos(e);
+            
+            const keys = Object.keys(elements).reverse();
+            dragTarget = null;
+            for (let key of keys) {
+                const el = elements[key];
+                if (el.type === 'text' && el.text) {
+                    let left = el.x; if (el.align === 'center') left -= el.w / 2; if (el.align === 'right') left -= el.w;
+                    if (pos.x >= left && pos.x <= left + el.w && pos.y >= el.y - el.h/2 && pos.y <= el.y + el.h/2) {
+                        dragTarget = el; break;
+                    }
+                } else if (el.type === 'image' && el.active) {
+                    if (pos.x >= el.x && pos.x <= el.x + el.w && pos.y >= el.y && pos.y <= el.y + el.h) {
+                        dragTarget = el; break;
+                    }
+                }
+            }
+
+            if (dragTarget) {
+                isDragging = true;
+                selectedElement = dragTarget;
+                syncControlPanel();
+                dragOffsetX = pos.x - dragTarget.x; dragOffsetY = pos.y - dragTarget.y;
+            } else { 
+                selectedElement = null; 
+            }
+            drawCanvas();
+        }
+
+        function handleMove(e) {
+            if (!isDragging || !dragTarget) return;
+            e.preventDefault(); const pos = getMousePos(e);
+            dragTarget.x = pos.x - dragOffsetX; dragTarget.y = pos.y - dragOffsetY;
+            
+            dragTarget.pctX = dragTarget.x / canvas.width;
+            dragTarget.pctY = dragTarget.y / canvas.height;
+            
+            drawCanvas();
+        }
+
+        function handleEnd() { isDragging = false; dragTarget = null; drawCanvas(); }
+
+        canvas.addEventListener('mousedown', handleStart); canvas.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('touchstart', handleStart, {passive: false}); canvas.addEventListener('touchmove', handleMove, {passive: false}); window.addEventListener('touchend', handleEnd);
+
+        function generatePDF() {
+            try {
+                if (!templateImg) {
+                    alert("❌ Please wait for the template to load, or upload one manually.");
+                    return;
+                }
+                const temp = selectedElement; selectedElement = null; drawCanvas(); 
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] });
+                
+                const imgData = canvas.toDataURL('image/jpeg', 1.0); 
+                
+                pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+                pdf.save(`${elements.name.text}_Certificate.pdf`);
+                selectedElement = temp; drawCanvas();
+            } catch (err) {
+                console.error(err);
+                alert("🚨 Security Error: Your browser blocked the download. Please use the 'Upload Template' button manually.");
+            }
+        }
+
+        function downloadImage() {
+            try {
+                if (!templateImg) {
+                    alert("❌ Please wait for the template to load, or upload one manually.");
+                    return;
+                }
+                const temp = selectedElement; selectedElement = null; drawCanvas();
+                const link = document.createElement('a'); link.download = `${elements.name.text}_Certificate.png`; 
+                
+                link.href = canvas.toDataURL('image/png', 1.0); 
+                
+                link.click();
+                selectedElement = temp; drawCanvas();
+            } catch (err) {
+                console.error(err);
+                alert("🚨 Security Error: Your browser blocked the download. Please use the 'Upload Template' button manually.");
+            }
+        }
+    </script>
+</body>
+</html>
