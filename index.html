@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SBM Certificate Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Great+Vibes&family=Playfair+Display:ital,wght@1,600&display=swap');
+        
+        :root {
+            --bg-color: #f0f2f5;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --text-color: #333;
+            --input-bg: rgba(255, 255, 255, 0.9);
+            --primary-btn: #4f46e5;
+            --primary-hover: #4338ca;
+            --danger-btn: #dc2626;
+            --danger-hover: #b91c1c;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --glass-bg: rgba(16, 16, 36, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-color: #e2e8f0;
+            --input-bg: rgba(0, 0, 0, 0.5);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; transition: background-color 0.3s, color 0.3s; }
+
+        body {
+            background: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%; max-width: 1400px; display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; padding: 15px 30px; background: var(--glass-bg);
+            border: 1px solid var(--glass-border); border-radius: 15px;
+        }
+
+        .container { display: flex; flex-wrap: wrap; gap: 20px; width: 100%; max-width: 1400px; }
+
+        .panel {
+            background: var(--glass-bg); border: 1px solid var(--glass-border);
+            border-radius: 20px; padding: 25px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .controls { flex: 1; min-width: 300px; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .preview-container { flex: 3; min-width: 300px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .editor-box { background: rgba(128, 128, 128, 0.1); padding: 15px; border-radius: 10px; border: 1px dashed var(--glass-border); display: flex; flex-direction: column; gap: 12px; }
+
+        label { font-size: 0.9rem; font-weight: 600; }
+        input[type="text"], input[type="file"], input[type="number"], select {
+            padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border);
+            background: var(--input-bg); color: var(--text-color); outline: none;
+        }
+        
+        button { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; flex: 1; color: white; margin-top: 10px; }
+        .btn-primary { background: var(--primary-btn); }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-danger { background: var(--danger-btn); }
+        .btn-danger:hover { background: var(--danger-hover); }
+        .toggle-btn { background: #333; flex: none; width: auto; margin-top:0; }
+        [data-theme="dark"] .toggle-btn { background: #f0f2f5; color: #333; }
+
+        canvas { max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: grab; background: #fff; }
+        
+        #errorMsg { color: #dc2626; font-weight: bold; text-align: center; margin-top: 10px; min-height: 20px; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h2>🎓 SBM CertiGen Pro</h2>
+        <button class="toggle-btn" onclick="toggleTheme()">🌓 Toggle Theme</button>
+    </header>
+
+    <div class="container">
+        <div class="panel controls">
+            <h3>Configuration</h3>
+            
+            <div class="form-group">
+                <label>1. Upload Template (JPG/PNG ONLY)</label>
+                <input type="file" id="templateUpload" accept="image/jpeg, image/png">
+            </div>
+
+            <div class="form-group">
+                <label>2. Upload Student Photo</label>
+                <input type="file" id="photoUpload" accept="image/jpeg, image/png">
+            </div>
+
+            <div id="errorMsg"></div>
+
+            <hr style="border: 1px solid var(--glass-border); margin: 5px 0;">
+
+            <div class="editor-box">
+                <div class="form-group">
+                    <label id="sizeInputLabel">Selected Item Size (px)</label>
+                    <input type="number" id="inpSizeControl" min="10" max="800" value="90" oninput="updateActiveElementSize()">
+                </div>
+                <div class="form-group" id="fontSelectGroup">
+                    <label>Selected Text Font Style</label>
+                    <select id="inpFontControl" onchange="updateActiveElementFont()">
+                        <option value='"Cascadia Code", monospace'>Cascadia Code (Bold Monospace)</option>
+                        <option value='Arial, sans-serif'>Arial (Clean Modern)</option>
+                        <option value='"Great Vibes", cursive'>Great Vibes (Elegant Handwriting)</option>
+                        <option value='"Playfair Display", serif'>Playfair Display (Classic Serif)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group"><label>Student Name</label><input type="text" id="inpName" value="Sawai Singh" oninput="updateCanvas()"></div>
+            <div class="form-group"><label>Father's Name</label><input type="text" id="inpFather" value="Laxman Singh" oninput="updateCanvas()"></div>
+            <div class="form-group"><label>Batch</label><input type="text" id="inpBatch" value="April" oninput="updateCanvas()"></div>
+            <div class="form-group"><label>Year</label><input type="text" id="inpYear" value="2026" oninput="updateCanvas()"></div>
+            <div class="form-group"><label>Date</label><input type="text" id="inpDate" value="April-2026" oninput="updateCanvas()"></div>
+            <div class="form-group"><label>Certificate Number</label><input type="text" id="inpSerial" placeholder="Optional Number Field" oninput="updateCanvas()"></div>
+            
+            <div class="form-group" style="flex-direction: row; align-items: center; gap: 10px;">
+                <input type="checkbox" id="inpQR" onchange="updateCanvas()">
+                <label for="inpQR">Generate QR Code</label>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" onclick="generatePDF()">📥 PDF</button>
+                <button class="btn-danger" onclick="downloadImage()">🖼️ PNG</button>
+            </div>
+        </div>
+
+        <div class="panel preview-container">
+            <canvas id="certCanvas" width="1600" height="1131"></canvas>
+            <p style="margin-top:10px; font-size: 0.8rem; opacity: 0.8;">🖱️ Drag items to nudge alignment perfectly over lines if templates skew.</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('certCanvas');
+        const ctx = canvas.getContext('2d');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        let templateImg = null;
+        let studentImg = null;
+        let qrImg = null;
+
+        // REMOVED GRADE ELEMENT
+        let elements = {
+            name:   { text: '', pctX: 0.270, pctY: 0.565, size: 90, font: '"Cascadia Code", monospace', color: '#FF0000', bold: true, align: 'left', type: 'text' },
+            father: { text: '', pctX: 0.635, pctY: 0.565, size: 90, font: '"Cascadia Code", monospace', color: '#FF0000', bold: true, align: 'left', type: 'text' },
+            batch:  { text: '', pctX: 0.255, pctY: 0.61
